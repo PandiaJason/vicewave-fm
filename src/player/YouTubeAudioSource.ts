@@ -71,7 +71,7 @@ export class YouTubeAudioSource implements IAudioSource {
     this.events = events;
   }
 
-  init(containerId: string, initialTrack: Track): void {
+  init(containerId: string, initialTrack: Track, _playlistId?: string): void {
     if (typeof window === 'undefined') return;
 
     this.loadedVideoId = initialTrack.youtubeVideoId;
