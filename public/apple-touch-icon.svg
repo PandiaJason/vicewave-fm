@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
+  <defs>
+    <linearGradient id="bgApple" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#160A2B"/>
+      <stop offset="100%" stop-color="#080713"/>
+    </linearGradient>
+    <linearGradient id="neonApple" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#27E5FF"/>
+      <stop offset="50%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#FF2DAA"/>
+    </linearGradient>
+  </defs>
+  <rect width="180" height="180" fill="url(#bgApple)"/>
+  <text x="90" y="78" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="900" font-style="italic" font-size="34" fill="url(#neonApple)" letter-spacing="2">VW</text>
+  <text x="90" y="114" text-anchor="middle" font-family="monospace" font-weight="700" font-size="24" fill="#27E5FF" letter-spacing="1">98.3</text>
+  <path d="M28 138 H64 L74 124 L86 148 L96 120 L108 144 L116 138 H152" fill="none" stroke="url(#neonApple)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

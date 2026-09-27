@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --font-display: 'Orbitron', 'Eurostile', 'Bank Gothic', 'Avenir Next Condensed', system-ui, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Share Tech Mono', 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+  --bg-midnight: #080713;
+  --bg-purple: #160a2b;
+  --neon-pink: #ff2daa;
+  --hot-magenta: #ff3dce;
+  --electric-cyan: #27e5ff;
+  --sunset-orange: #ff7849;
+  --sunset-gold: #ffb347;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #080713;
+  color: #ffffff;
+  overscroll-behavior-y: none;
+  overflow-x: hidden;
+}
+
+/* Hide scrollbars on horizontal pill strips while retaining scroll functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes pulseSlow {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translate(-50%, 0) scale(1);
+  }
+  50% {
+    opacity: 0.36;
+    transform: translate(-50%, 0) scale(1.03);
+  }
+}
+
+@keyframes pingSlow {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.25);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulseSlow 6s ease-in-out infinite;
+}
+
+.animate-ping-slow {
+  animation: pingSlow 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-slow,
+  .animate-ping-slow {
+    animation: none !important;
+  }
+}

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg512" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#160A2B"/>
+      <stop offset="100%" stop-color="#080713"/>
+    </linearGradient>
+    <linearGradient id="neon512" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#27E5FF"/>
+      <stop offset="50%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#FF2DAA"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg512)" stroke="#27E5FF" stroke-width="6" stroke-opacity="0.5"/>
+  <circle cx="256" cy="196" r="118" fill="#FF2DAA" fill-opacity="0.14"/>
+  <text x="256" y="215" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="900" font-style="italic" font-size="96" fill="url(#neon512)" letter-spacing="6">VW</text>
+  <text x="256" y="318" text-anchor="middle" font-family="monospace" font-weight="700" font-size="72" fill="#27E5FF" letter-spacing="4">98.3</text>
+  <path d="M72 396 H180 L206 356 L238 428 L272 342 L302 410 L326 396 H440" fill="none" stroke="url(#neon512)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

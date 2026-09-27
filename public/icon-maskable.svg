@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgMask" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#160A2B"/>
+      <stop offset="100%" stop-color="#080713"/>
+    </linearGradient>
+    <linearGradient id="neonMask" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#27E5FF"/>
+      <stop offset="50%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#FF2DAA"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bgMask)"/>
+  <text x="256" y="220" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="900" font-style="italic" font-size="84" fill="url(#neonMask)" letter-spacing="4">VW</text>
+  <text x="256" y="308" text-anchor="middle" font-family="monospace" font-weight="700" font-size="60" fill="#27E5FF" letter-spacing="3">98.3</text>
+  <path d="M104 372 H194 L216 340 L244 398 L272 332 L298 386 L318 372 H408" fill="none" stroke="url(#neonMask)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
