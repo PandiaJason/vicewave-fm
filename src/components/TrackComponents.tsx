@@ -111,12 +111,16 @@ export const TrackCard: React.FC<{ track: Track }> = ({ track }) => {
             </h3>
           </div>
           <p className="text-xs text-white/65 truncate mt-0.5">{track.artist}</p>
-          <div className="mt-1 flex items-center gap-2 text-[10px] font-mono text-white/45">
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-white/45">
             <span className="text-[#FF2DAA] font-semibold">
               {station?.frequency || '98.3'} FM
             </span>
             <span>•</span>
             <span>{formatTime(track.duration)}</span>
+            <span>•</span>
+            <span className="text-[#27E5FF]/85">
+              {track.startTimeLabel}–{track.endTimeLabel}
+            </span>
             <span>•</span>
             <span className="uppercase">{track.genre}</span>
           </div>

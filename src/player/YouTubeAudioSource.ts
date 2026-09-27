@@ -40,8 +40,14 @@ export interface YTPlayerInstance {
   mute: () => void;
   unMute: () => void;
   isMuted: () => boolean;
-  loadVideoById: (videoId: string, startSeconds?: number) => void;
-  cueVideoById: (videoId: string, startSeconds?: number) => void;
+  loadVideoById: (
+    videoIdOrConfig: string | { videoId: string; startSeconds?: number },
+    startSeconds?: number
+  ) => void;
+  cueVideoById: (
+    videoIdOrConfig: string | { videoId: string; startSeconds?: number },
+    startSeconds?: number
+  ) => void;
   getCurrentTime: () => number;
   getDuration: () => number;
   getVideoData: () => { video_id?: string; title?: string; author?: string };
@@ -51,6 +57,7 @@ export interface YTPlayerInstance {
 export class YouTubeAudioSource implements IAudioSource {
   private player: YTPlayerInstance | null = null;
   private isReady = false;
+  private loadedVideoId: string | null = null;
   private events: AudioSourceEvents;
   private progressTimer: ReturnType<typeof setInterval> | null = null;
   private pendingTrack: { track: Track; autoplay: boolean } | null = null;
@@ -64,10 +71,11 @@ export class YouTubeAudioSource implements IAudioSource {
     this.events = events;
   }
 
-  init(containerId: string, initialTrack: Track, playlistId?: string): void {
+  init(containerId: string, initialTrack: Track): void {
     if (typeof window === 'undefined') return;
 
-    // Keep background playback alive if mobile browser attempts to pause on visibilitychange / screen lock
+    this.loadedVideoId = initialTrack.youtubeVideoId;
+
     this.visibilityHandler = () => {
       if (this.userIntendedPlay && this.isReady && this.player) {
         setTimeout(() => {
@@ -98,8 +106,8 @@ export class YouTubeAudioSource implements IAudioSource {
             rel: 0,
             modestbranding: 1,
             enablejsapi: 1,
+            start: initialTrack.startSeconds || 0,
             origin: window.location.origin,
-            ...(playlistId ? { listType: 'playlist', list: playlistId } : {}),
           },
           events: {
             onReady: (e) => {
@@ -118,6 +126,7 @@ export class YouTubeAudioSource implements IAudioSource {
               } else if (this.pendingPlay) {
                 this.pendingPlay = false;
                 this.userIntendedPlay = true;
+                e.target.seekTo(initialTrack.startSeconds || 0, true);
                 e.target.playVideo();
               }
             },
@@ -161,10 +170,7 @@ export class YouTubeAudioSource implements IAudioSource {
       this.userIntendedPlay = true;
       this.events.onStatusChange('PLAYING');
       this.startProgressLoop();
-      this.syncMetadata();
     } else if (stateCode === 2) {
-      // If the page is hidden (backgrounded / screen locked) and the user did NOT pause,
-      // immediately resume playback to maintain background mode!
       if (
         this.userIntendedPlay &&
         typeof document !== 'undefined' &&
@@ -193,24 +199,6 @@ export class YouTubeAudioSource implements IAudioSource {
     }
   }
 
-  private syncMetadata() {
-    if (!this.player || !this.isReady) return;
-    try {
-      const data = this.player.getVideoData?.();
-      const duration = this.player.getDuration?.() || 0;
-      if (data && data.video_id && data.title && this.events.onMetadataUpdate) {
-        this.events.onMetadataUpdate(
-          data.video_id,
-          data.title,
-          data.author || 'ViceWave 80s Rotation',
-          duration
-        );
-      }
-    } catch {
-      // ignore metadata lookup failure
-    }
-  }
-
   private startProgressLoop() {
     this.stopProgressLoop();
     this.progressTimer = setInterval(() => {
@@ -222,7 +210,7 @@ export class YouTubeAudioSource implements IAudioSource {
       } catch {
         // ignore transient iframe state errors
       }
-    }, 450);
+    }, 350);
   }
 
   private stopProgressLoop() {
@@ -268,12 +256,35 @@ export class YouTubeAudioSource implements IAudioSource {
       return;
     }
 
+    const startSec = track.startSeconds || 0;
+
     try {
+      // If the station's broadcast video is already loaded, seek directly to the song's startSeconds!
+      if (this.loadedVideoId === track.youtubeVideoId) {
+        this.player.seekTo(startSec, true);
+        if (autoplay) {
+          this.player.playVideo();
+          this.events.onStatusChange('PLAYING');
+          this.startProgressLoop();
+        } else {
+          this.player.pauseVideo();
+        }
+        return;
+      }
+
+      // Otherwise load the new station's broadcast video at startSec
+      this.loadedVideoId = track.youtubeVideoId;
       if (autoplay) {
         this.events.onStatusChange('BUFFERING');
-        this.player.loadVideoById(track.youtubeVideoId, 0);
+        this.player.loadVideoById({
+          videoId: track.youtubeVideoId,
+          startSeconds: startSec,
+        });
       } else {
-        this.player.cueVideoById(track.youtubeVideoId, 0);
+        this.player.cueVideoById({
+          videoId: track.youtubeVideoId,
+          startSeconds: startSec,
+        });
       }
     } catch {
       this.events.onError('LOAD_FAILED');
@@ -284,8 +295,6 @@ export class YouTubeAudioSource implements IAudioSource {
     if (!this.isReady || !this.player) return;
     try {
       this.player.seekTo(seconds, true);
-      const duration = this.player.getDuration() || 0;
-      this.events.onTimeUpdate(seconds, duration);
     } catch {
       // ignore
     }

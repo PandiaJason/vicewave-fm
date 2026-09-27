@@ -102,7 +102,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
   const [stations] = useState<Station[]>(STATIONS);
   const [currentStationId, setCurrentStationId] = useState<string>('vicewave-fm');
-  const [currentTrackId, setCurrentTrackId] = useState<string>('vw-04');
+  // Default to "Out of Touch" by Daryl Hall & John Oates on 98.3 VICEWAVE FM
+  const [currentTrackId, setCurrentTrackId] = useState<string>('vw-983-01');
   const [playerState, setPlayerState] = useState<PlaybackStatus>('IDLE');
   const [favorites, setFavorites] = useState<string[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -190,10 +191,15 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }))
       );
 
-      if (savedHist.length > 0) {
-        setHistory(savedHist);
+      // Filter out any legacy track IDs from history
+      const validHist = savedHist.filter((h) =>
+        INITIAL_TRACKS.some((t) => t.id === h.trackId)
+      );
+
+      if (validHist.length > 0) {
+        setHistory(validHist);
       } else {
-        const initialHistory = await saveHistoryEntry('vw-04');
+        const initialHistory = await saveHistoryEntry('vw-983-01');
         setHistory(initialHistory);
       }
 
@@ -252,8 +258,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     if (fromEnded && prefs.repeatMode === 'ONE') {
       const current = allTracks.find((t) => t.id === currentTrackIdRef.current) || pool[0];
-      audioSourceRef.current?.seek(0);
-      audioSourceRef.current?.play();
+      audioSourceRef.current?.loadTrack(current, true);
       backgroundAudioManager.startKeepAlive();
       saveHistoryEntry(current.id).then(setHistory);
       return;
@@ -291,9 +296,54 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           backgroundAudioManager.startKeepAlive();
         }
       },
-      onTimeUpdate: (curr, dur) => {
-        progressStore.setProgress(curr, dur);
-        backgroundAudioManager.updatePositionState(curr, dur);
+      onTimeUpdate: (rawVideoSeconds) => {
+        const allTracks = tracksRef.current;
+        const active =
+          allTracks.find((t) => t.id === currentTrackIdRef.current) || allTracks[0];
+
+        // Calculate song-relative elapsed time (0 .. active.duration)
+        const relElapsed = Math.max(
+          0,
+          Math.min(active.duration, rawVideoSeconds - active.startSeconds)
+        );
+        progressStore.setProgress(relElapsed, active.duration);
+        backgroundAudioManager.updatePositionState(relElapsed, active.duration);
+
+        // Check if current song has reached its endSeconds timestamp
+        if (rawVideoSeconds >= active.endSeconds) {
+          if (sleepTimerRef.current.option === 'END_OF_TRACK') {
+            audioSourceRef.current?.pause();
+            backgroundAudioManager.stopKeepAlive();
+            setPlayerState('PAUSED');
+            setSleepTimer({ option: 'OFF', expiresAt: null, remainingSeconds: null });
+            return;
+          }
+
+          if (preferencesRef.current.repeatMode === 'ONE') {
+            audioSourceRef.current?.seek(active.startSeconds);
+            return;
+          }
+
+          if (preferencesRef.current.shuffle) {
+            handleNextTrackInternal(true);
+            return;
+          }
+        }
+
+        // Natural continuous broadcast auto-track synchronization:
+        // If the video timestamp crosses into another track on the same station, update Now Playing automatically!
+        const stationTracks = allTracks.filter(
+          (t) => t.stationId === currentStationIdRef.current
+        );
+        const matchedTrack = stationTracks.find(
+          (t) => rawVideoSeconds >= t.startSeconds && rawVideoSeconds < t.endSeconds
+        );
+
+        if (matchedTrack && matchedTrack.id !== currentTrackIdRef.current) {
+          setCurrentTrackId(matchedTrack.id);
+          saveHistoryEntry(matchedTrack.id).then(setHistory);
+          saveStationState(currentStationIdRef.current, matchedTrack.id);
+        }
       },
       onTrackEnd: () => {
         handleNextTrackInternal(true);
@@ -305,22 +355,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         } else {
           setPlayerState('ERROR');
         }
-      },
-      onMetadataUpdate: (videoId, liveTitle, liveAuthor, liveDuration) => {
-        if (!liveTitle) return;
-        setTracks((prev) =>
-          prev.map((t) => {
-            if (t.id === currentTrackIdRef.current && t.youtubeVideoId === videoId) {
-              return {
-                ...t,
-                title: liveTitle,
-                artist: liveAuthor || t.artist,
-                duration: liveDuration > 0 ? Math.floor(liveDuration) : t.duration,
-              };
-            }
-            return t;
-          })
-        );
       },
     });
 
@@ -335,7 +369,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, [handleNextTrackInternal]);
 
-  // Synchronize Lock-Screen MediaSession metadata whenever track, station, or playback state updates
   useEffect(() => {
     backgroundAudioManager.updateMediaSessionMetadata(
       currentTrack,
@@ -366,7 +399,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => clearInterval(timer);
   }, [sleepTimer.expiresAt]);
 
-  // Request Screen Wake Lock whenever actively playing or in Night Drive mode
   useEffect(() => {
     let wakeLock: { release: () => Promise<void> } | null = null;
     async function requestWakeLock() {
@@ -424,9 +456,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const previousTrack = useCallback(() => {
     triggerHaptic(12);
     backgroundAudioManager.startKeepAlive();
-    const currTime = audioSourceRef.current?.getCurrentTime() || 0;
-    if (currTime > 4) {
-      audioSourceRef.current?.seek(0);
+    const active =
+      tracksRef.current.find((t) => t.id === currentTrackIdRef.current) || tracksRef.current[0];
+    const rawVideoTime = audioSourceRef.current?.getCurrentTime() || 0;
+    const relTime = Math.max(0, rawVideoTime - active.startSeconds);
+
+    if (relTime > 5) {
+      audioSourceRef.current?.seek(active.startSeconds);
+      progressStore.setProgress(0, active.duration);
       return;
     }
 
@@ -538,11 +575,16 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [stations, selectStation]
   );
 
-  const seekTo = useCallback((seconds: number) => {
-    audioSourceRef.current?.seek(seconds);
+  // Seek within the active song's [startSeconds .. endSeconds] window
+  const seekTo = useCallback((relativeSeconds: number) => {
+    const active =
+      tracksRef.current.find((t) => t.id === currentTrackIdRef.current) || tracksRef.current[0];
+    const clampedRel = Math.max(0, Math.min(active.duration, relativeSeconds));
+    const targetVideoSeconds = active.startSeconds + clampedRel;
+    progressStore.setProgress(clampedRel, active.duration);
+    audioSourceRef.current?.seek(targetVideoSeconds);
   }, []);
 
-  // Register Lock-Screen & Bluetooth/CarPlay MediaSession controls
   useEffect(() => {
     backgroundAudioManager.registerActionHandlers({
       onPlay: () => play(),

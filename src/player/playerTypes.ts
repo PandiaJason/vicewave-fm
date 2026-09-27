@@ -9,7 +9,11 @@ export interface Track {
   title: string;
   artist: string;
   thumbnail: string;
-  duration: number; // in seconds
+  startSeconds: number;
+  endSeconds: number;
+  startTimeLabel: string;
+  endTimeLabel: string;
+  duration: number; // endSeconds - startSeconds
   stationId: string;
   genre: Exclude<GenreType, 'ALL'>;
   favorite?: boolean;
@@ -28,6 +32,7 @@ export interface Station {
   genre: Exclude<GenreType, 'ALL'>;
   channelCode: string; // e.g. "CH 01"
   accentColor: string; // hex
+  youtubeVideoId: string;
   trackIds: string[];
 }
 
