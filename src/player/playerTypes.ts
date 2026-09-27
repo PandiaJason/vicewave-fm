@@ -5,6 +5,7 @@ export type SourceType = 'youtube' | 'local';
 export interface Track {
   id: string;
   youtubeVideoId: string;
+  audioStreamUrl: string;
   playlistIndex?: number;
   title: string;
   artist: string;
@@ -33,6 +34,7 @@ export interface Station {
   channelCode: string; // e.g. "CH 01"
   accentColor: string; // hex
   youtubeVideoId: string;
+  audioStreamUrl: string;
   trackIds: string[];
 }
 

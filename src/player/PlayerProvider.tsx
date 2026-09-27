@@ -41,7 +41,7 @@ import {
   Track,
   UserPreferences,
 } from '@/player/playerTypes';
-import { YouTubeAudioSource } from '@/player/YouTubeAudioSource';
+import { HybridAudioSource } from '@/player/HybridAudioSource';
 import { YouTubePlayer } from '@/player/YouTubePlayer';
 
 export interface TuningTransitionState {
@@ -127,7 +127,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     targetStationName: 'VICEWAVE FM',
   });
 
-  const audioSourceRef = useRef<IAudioSource | null>(null);
+  const audioSourceRef = useRef<HybridAudioSource | null>(null);
   const currentTrackIdRef = useRef<string>(currentTrackId);
   const currentStationIdRef = useRef<string>(currentStationId);
   const preferencesRef = useRef<UserPreferences>(preferences);
@@ -289,7 +289,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   useEffect(() => {
-    const source = new YouTubeAudioSource({
+    const source = new HybridAudioSource({
       onStatusChange: (status) => {
         setPlayerState(status);
         if (status === 'PLAYING') {
@@ -331,7 +331,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
 
         // Natural continuous broadcast auto-track synchronization:
-        // If the video timestamp crosses into another track on the same station, update Now Playing automatically!
+        // If the broadcast timestamp crosses into another track on the same station, update Now Playing automatically!
         const stationTracks = allTracks.filter(
           (t) => t.stationId === currentStationIdRef.current
         );
@@ -368,6 +368,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       audioSourceRef.current = null;
     };
   }, [handleNextTrackInternal]);
+
+  useEffect(() => {
+    audioSourceRef.current?.setVideoMode(videoModeOpen);
+  }, [videoModeOpen]);
 
   useEffect(() => {
     backgroundAudioManager.updateMediaSessionMetadata(

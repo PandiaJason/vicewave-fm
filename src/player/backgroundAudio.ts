@@ -1,55 +1,5 @@
 import { Station, Track } from '@/player/playerTypes';
 
-/**
- * Generates a valid, tiny 1-second stereo PCM WAV data URI with a sub-audible
- * signal (amplitude 1/32767) so iOS Safari and Android Chrome register the top-level
- * PWA window as an active media playback session, keeping background execution alive
- * and binding `navigator.mediaSession` to the OS lock screen & Bluetooth controls.
- */
-function createSilentKeepAliveWavDataUri(): string {
-  const sampleRate = 8000;
-  const numChannels = 2;
-  const bitsPerSample = 16;
-  const numSamples = sampleRate; // 1 second loop
-  const blockAlign = (numChannels * bitsPerSample) / 8;
-  const byteRate = sampleRate * blockAlign;
-  const dataSize = numSamples * blockAlign;
-  const buffer = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(buffer);
-
-  const writeString = (offset: number, str: string) => {
-    for (let i = 0; i < str.length; i++) {
-      view.setUint8(offset + i, str.charCodeAt(i));
-    }
-  };
-
-  writeString(0, 'RIFF');
-  view.setUint32(4, 36 + dataSize, true);
-  writeString(8, 'WAVE');
-  writeString(12, 'fmt ');
-  view.setUint32(16, 16, true); // PCM chunk size
-  view.setUint16(20, 1, true); // PCM format
-  view.setUint16(22, numChannels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, byteRate, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, bitsPerSample, true);
-  writeString(36, 'data');
-  view.setUint32(40, dataSize, true);
-
-  // Sub-audible 1 LSB sample so mobile OS audio decoders do not strip zero-silence frames
-  for (let i = 0; i < numSamples * numChannels; i++) {
-    view.setInt16(44 + i * 2, i % 2 === 0 ? 1 : -1, true);
-  }
-
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return `data:audio/wav;base64,${typeof btoa !== 'undefined' ? btoa(binary) : ''}`;
-}
-
 export interface MediaSessionHandlers {
   onPlay: () => void;
   onPause: () => void;
@@ -59,36 +9,10 @@ export interface MediaSessionHandlers {
 }
 
 class BackgroundAudioManager {
-  private audioEl: HTMLAudioElement | null = null;
   private audioCtx: AudioContext | null = null;
-  private initialized = false;
-
-  init() {
-    if (typeof window === 'undefined' || this.initialized) return;
-    this.initialized = true;
-
-    try {
-      const audio = document.createElement('audio');
-      audio.src = createSilentKeepAliveWavDataUri();
-      audio.loop = true;
-      audio.volume = 0.01;
-      audio.setAttribute('playsinline', 'true');
-      audio.setAttribute('webkit-playsinline', 'true');
-      audio.preload = 'auto';
-      this.audioEl = audio;
-    } catch {
-      // ignore
-    }
-  }
 
   startKeepAlive() {
     if (typeof window === 'undefined') return;
-    this.init();
-
-    if (this.audioEl && this.audioEl.paused) {
-      this.audioEl.play().catch(() => {});
-    }
-
     try {
       const AudioCtx =
         window.AudioContext ||
@@ -107,13 +31,7 @@ class BackgroundAudioManager {
   }
 
   stopKeepAlive() {
-    if (this.audioEl && !this.audioEl.paused) {
-      try {
-        this.audioEl.pause();
-      } catch {
-        // ignore
-      }
-    }
+    // No secondary <audio> element needed because HybridAudioSource plays native HTML5 <audio>
   }
 
   updateMediaSessionMetadata(track: Track, station: Station, isPlaying: boolean) {
@@ -207,7 +125,7 @@ class BackgroundAudioManager {
       try {
         navigator.mediaSession.setActionHandler(action, handler);
       } catch {
-        // Some browsers don't support all MediaSession actions
+        // ignore unsupported MediaSession actions
       }
     }
   }

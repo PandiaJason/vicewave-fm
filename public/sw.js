@@ -43,7 +43,8 @@ self.addEventListener('fetch', (event) => {
   if (
     url.hostname.includes('youtube.com') ||
     url.hostname.includes('googlevideo.com') ||
-    url.hostname.includes('ytimg.com')
+    url.hostname.includes('ytimg.com') ||
+    url.hostname.includes('archive.org')
   ) {
     return;
   }

@@ -3,6 +3,14 @@ import { GenreType, Station, Track, UserPreferences } from '@/player/playerTypes
 export const INITIAL_YOUTUBE_PLAYLIST_ID = 'PL-vB0QZpsqn5GOYHr3N2YG5qEdj07wFzk';
 export const INITIAL_VIDEO_ID = 'B-8EORB783c';
 
+export const STATION_AUDIO_STREAMS = {
+  'vicewave-fm': 'https://archive.org/download/flash-fm-gta-vice-city_202203/flash-fm-gta-vice-city.mp3',
+  'neon-fm': 'https://archive.org/download/gtavc_radiofull/WAVE.mp3',
+  'sunset-fm': 'https://archive.org/download/gtavc_radiofull/FEVER.mp3',
+  'midnight-rock': 'https://archive.org/download/GTAViceCityVRockFullRadioStation/GTA%20Vice%20City%20V-Rock%20Full%20Radio%20Station.mp3',
+  'palm-fm': 'https://archive.org/download/gtavc_radiofull/EMOTION.mp3',
+} as const;
+
 export function parseTimestampToSeconds(ts: string): number {
   const parts = ts.trim().split(':').map(Number);
   if (parts.length === 3) {
@@ -113,12 +121,13 @@ const PALM_957_RAW: RawChapter[] = [
 
 function buildStationTracks(
   prefix: string,
-  stationId: string,
+  stationId: keyof typeof STATION_AUDIO_STREAMS,
   youtubeVideoId: string,
   playlistIndex: number,
   genre: Exclude<GenreType, 'ALL'>,
   chapters: RawChapter[]
 ): Track[] {
+  const audioStreamUrl = STATION_AUDIO_STREAMS[stationId];
   return chapters.map((ch, idx) => {
     const startSeconds = parseTimestampToSeconds(ch.start);
     const endSeconds = parseTimestampToSeconds(ch.end);
@@ -126,6 +135,7 @@ function buildStationTracks(
     return {
       id: `${prefix}-${String(idx + 1).padStart(2, '0')}`,
       youtubeVideoId,
+      audioStreamUrl,
       playlistIndex,
       title: ch.title,
       artist: ch.artist,
@@ -210,6 +220,7 @@ export const STATIONS: Station[] = [
     channelCode: 'CH 01',
     accentColor: '#FFB347',
     youtubeVideoId: '1vU4BF5-kvQ',
+    audioStreamUrl: STATION_AUDIO_STREAMS['palm-fm'],
     trackIds: palmTracks.map((t) => t.id),
   },
   {
@@ -224,6 +235,7 @@ export const STATIONS: Station[] = [
     channelCode: 'CH 02',
     accentColor: '#FF2DAA',
     youtubeVideoId: 'B-8EORB783c',
+    audioStreamUrl: STATION_AUDIO_STREAMS['vicewave-fm'],
     trackIds: vicewaveTracks.map((t) => t.id),
   },
   {
@@ -238,6 +250,7 @@ export const STATIONS: Station[] = [
     channelCode: 'CH 03',
     accentColor: '#27E5FF',
     youtubeVideoId: 'utK2tcVdDu0',
+    audioStreamUrl: STATION_AUDIO_STREAMS['neon-fm'],
     trackIds: neonTracks.map((t) => t.id),
   },
   {
@@ -252,6 +265,7 @@ export const STATIONS: Station[] = [
     channelCode: 'CH 04',
     accentColor: '#FF7849',
     youtubeVideoId: 'icbXPB5vqCs',
+    audioStreamUrl: STATION_AUDIO_STREAMS['sunset-fm'],
     trackIds: sunsetTracks.map((t) => t.id),
   },
   {
@@ -266,6 +280,7 @@ export const STATIONS: Station[] = [
     channelCode: 'CH 05',
     accentColor: '#FF3DCE',
     youtubeVideoId: 'Up2qr5K6zc4',
+    audioStreamUrl: STATION_AUDIO_STREAMS['midnight-rock'],
     trackIds: midnightTracks.map((t) => t.id),
   },
 ];
