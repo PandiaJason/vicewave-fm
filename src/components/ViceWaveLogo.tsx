@@ -6,6 +6,7 @@ interface ViceWaveLogoProps {
   size?: 'sm' | 'md' | 'lg';
   showTagline?: boolean;
   showPromise?: boolean;
+  showEmblem?: boolean;
   className?: string;
 }
 
@@ -13,22 +14,37 @@ export const ViceWaveLogo: React.FC<ViceWaveLogoProps> = ({
   size = 'md',
   showTagline = true,
   showPromise = false,
+  showEmblem = true,
   className = '',
 }) => {
+  const emblemSize = {
+    sm: 'w-20 h-auto',
+    md: 'w-28 sm:w-32 h-auto',
+    lg: 'w-40 sm:w-48 h-auto',
+  }[size];
+
   const titleClasses = {
-    sm: 'text-lg tracking-[0.18em]',
-    md: 'text-2xl tracking-[0.22em]',
-    lg: 'text-4xl sm:text-5xl tracking-[0.24em]',
+    sm: 'text-base tracking-[0.18em]',
+    md: 'text-xl sm:text-2xl tracking-[0.22em]',
+    lg: 'text-3xl sm:text-4xl tracking-[0.24em]',
   }[size];
 
   const fmClasses = {
-    sm: 'text-[10px] px-1.5 py-0.5',
-    md: 'text-xs px-2 py-0.5',
-    lg: 'text-sm px-2.5 py-0.5',
+    sm: 'text-[9px] px-1.5 py-0.5',
+    md: 'text-[11px] px-2 py-0.5',
+    lg: 'text-xs px-2.5 py-0.5',
   }[size];
 
   return (
     <div className={`inline-flex flex-col items-center select-none ${className}`}>
+      {showEmblem && (
+        <img
+          src="/logo.png"
+          alt="ViceWave FM Cassette Emblem"
+          className={`${emblemSize} mb-1.5 drop-shadow-[0_0_18px_rgba(255,45,170,0.45)]`}
+        />
+      )}
+
       <div className="flex items-baseline gap-2">
         <span
           className={`font-display font-black italic uppercase bg-gradient-to-r from-[#27E5FF] via-[#FFF4FA] to-[#FF2DAA] bg-clip-text text-transparent drop-shadow-[0_0_14px_rgba(255,45,170,0.35)] ${titleClasses}`}
