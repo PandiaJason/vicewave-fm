@@ -17,13 +17,17 @@ import {
   Download,
   Heart,
   Moon,
+  MoreVertical,
   Music,
   Pause,
   Play,
+  PlusSquare,
   Radio,
   RefreshCw,
   Settings,
+  Share,
   SkipForward,
+  Smartphone,
   WifiOff,
   X,
 } from 'lucide-react';
@@ -31,6 +35,12 @@ import {
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+declare global {
+  interface Window {
+    __deferredPwaPrompt?: BeforeInstallPromptEvent | null;
+  }
 }
 
 export const MiniPlayer: React.FC = () => {
@@ -44,7 +54,6 @@ export const MiniPlayer: React.FC = () => {
     nextTrack,
   } = usePlayer();
 
-  // Only show MiniPlayer when navigated away from the primary Radio screen ("/")
   if (pathname === '/') return null;
 
   const isPlaying = playerState === 'PLAYING';
@@ -416,84 +425,315 @@ export const OfflineAndErrorBanners: React.FC = () => {
   return null;
 };
 
-export const InstallPrompt: React.FC = () => {
-  const [deferredPrompt, setDeferredPrompt] =
-    useState<BeforeInstallPromptEvent | null>(null);
-  const [dismissed, setDismissed] = useState(true);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const wasDismissed =
-      window.localStorage.getItem('vw_install_dismissed') === '1';
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-    if (wasDismissed || isStandalone) return;
-
-    const timer = setTimeout(() => {
-      setDismissed(false);
-    }, 12000);
-
-    const handleBeforeInstall = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-      setDismissed(false);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
-    };
-  }, []);
-
-  const handleDismiss = () => {
-    setDismissed(true);
-    try {
-      window.localStorage.setItem('vw_install_dismissed', '1');
-    } catch {
-      // ignore
-    }
-  };
-
-  const handleInstall = async () => {
-    if (deferredPrompt) {
-      await deferredPrompt.prompt();
-      setDeferredPrompt(null);
-    }
-    handleDismiss();
-  };
-
-  if (dismissed) return null;
-
+export const TopMobilePwaBar: React.FC<{
+  onDownloadClick: () => void;
+  onDismiss: () => void;
+}> = ({ onDownloadClick, onDismiss }) => {
   return (
-    <div className="w-full mt-4 p-4 rounded-2xl bg-gradient-to-r from-[#1A0D33]/95 to-[#110822]/95 border border-[#27E5FF]/40 shadow-neon-cyan">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-[11px] font-mono font-bold tracking-[0.22em] text-[#27E5FF] uppercase">
-            TAKE THE NIGHT WITH YOU
+    <div className="w-full mb-2.5 p-2.5 rounded-2xl bg-gradient-to-r from-[#230E3F]/95 via-[#130826]/95 to-[#230E3F]/95 border border-[#27E5FF]/60 shadow-neon-cyan flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <img
+          src="/logo.png"
+          alt="ViceWave FM"
+          className="w-10 h-8 object-contain shrink-0 rounded bg-[#080713] p-0.5 border border-[#FF2DAA]/40"
+        />
+        <div className="min-w-0">
+          <div className="text-[10px] font-mono font-bold tracking-[0.16em] text-[#27E5FF] uppercase truncate">
+            VICEWAVE FM MOBILE APP
           </div>
-          <p className="text-xs text-white/75 mt-1">
-            Install ViceWave FM for a fullscreen radio experience.
-          </p>
+          <div className="text-[11px] text-white/80 truncate">
+            Download fullscreen PWA to your phone
+          </div>
         </div>
       </div>
-      <div className="mt-3 flex items-center gap-2.5">
+
+      <div className="flex items-center gap-1.5 shrink-0">
         <button
           type="button"
-          onClick={handleInstall}
-          className="min-h-[44px] px-4 rounded-xl bg-gradient-to-r from-[#FF2DAA] to-[#FF3DCE] text-xs font-mono font-bold tracking-wider text-white flex items-center gap-2 shadow-neon-pink"
+          onClick={onDownloadClick}
+          className="min-h-[38px] px-3 rounded-xl bg-gradient-to-r from-[#FF2DAA] to-[#27E5FF] text-[10px] font-mono font-bold tracking-wider text-white flex items-center gap-1.5 shadow-neon-pink active:scale-95 transition"
         >
           <Download className="w-3.5 h-3.5" />
-          <span>INSTALL VICEWAVE</span>
+          <span>DOWNLOAD</span>
         </button>
         <button
           type="button"
-          onClick={handleDismiss}
-          className="min-h-[44px] px-4 rounded-xl bg-white/5 border border-white/10 text-xs font-mono text-white/65 hover:text-white"
+          onClick={onDismiss}
+          aria-label="Hide top download banner"
+          className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-white/55 hover:text-white"
         >
-          NOT NOW
+          <X className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>
+  );
+};
+
+export const InstallPrompt: React.FC<{ renderTopBarOnly?: boolean }> = ({
+  renderTopBarOnly = false,
+}) => {
+  const [deferredPrompt, setDeferredPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
+  const [bannerVisible, setBannerVisible] = useState(false);
+  const [guideModalOpen, setGuideModalOpen] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const standalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+    setIsStandalone(standalone);
+
+    const ua = window.navigator.userAgent.toLowerCase();
+    const iosDevice = /iphone|ipad|ipod/.test(ua);
+    setIsIOS(iosDevice);
+
+    if (window.__deferredPwaPrompt) {
+      setDeferredPrompt(window.__deferredPwaPrompt);
+    }
+
+    if (!standalone) {
+      setBannerVisible(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const syncDeferred = () => {
+      if (window.__deferredPwaPrompt) {
+        setDeferredPrompt(window.__deferredPwaPrompt);
+        setBannerVisible(true);
+      }
+    };
+
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      const evt = e as BeforeInstallPromptEvent;
+      window.__deferredPwaPrompt = evt;
+      setDeferredPrompt(evt);
+      setBannerVisible(true);
+    };
+
+    const handleOpenInstallRequest = async () => {
+      const promptEvt = deferredPrompt || window.__deferredPwaPrompt;
+      if (promptEvt) {
+        await promptEvt.prompt();
+        const choice = await promptEvt.userChoice;
+        if (choice.outcome === 'accepted') {
+          window.__deferredPwaPrompt = null;
+          setDeferredPrompt(null);
+          setBannerVisible(false);
+        }
+      } else {
+        setGuideModalOpen(true);
+      }
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('vicewave:pwa-ready', syncDeferred);
+    window.addEventListener('vicewave:open-install', handleOpenInstallRequest);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('vicewave:pwa-ready', syncDeferred);
+      window.removeEventListener('vicewave:open-install', handleOpenInstallRequest);
+    };
+  }, [deferredPrompt]);
+
+  const handleDismiss = () => {
+    setBannerVisible(false);
+  };
+
+  const handleInstallClick = async () => {
+    const promptEvt = deferredPrompt || window.__deferredPwaPrompt;
+    if (promptEvt) {
+      await promptEvt.prompt();
+      const choice = await promptEvt.userChoice;
+      if (choice.outcome === 'accepted') {
+        window.__deferredPwaPrompt = null;
+        setDeferredPrompt(null);
+        setBannerVisible(false);
+      }
+    } else {
+      setGuideModalOpen(true);
+    }
+  };
+
+  if (isStandalone) return null;
+
+  if (renderTopBarOnly) {
+    return bannerVisible ? (
+      <TopMobilePwaBar
+        onDownloadClick={handleInstallClick}
+        onDismiss={handleDismiss}
+      />
+    ) : null;
+  }
+
+  return (
+    <>
+      <AnimatePresence>
+        {bannerVisible && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            className="w-full mt-4 p-4 rounded-2xl bg-gradient-to-r from-[#1D0D36]/95 via-[#130826]/95 to-[#1D0D36]/95 border border-[#27E5FF]/55 shadow-neon-cyan"
+          >
+            <div className="flex items-center gap-3">
+              <img
+                src="/logo.png"
+                alt="ViceWave FM App Icon"
+                className="w-14 h-11 object-contain shrink-0 rounded-lg bg-[#080713] p-1 border border-[#FF2DAA]/50"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-mono font-bold tracking-[0.2em] text-[#27E5FF] uppercase">
+                  TAKE THE NIGHT WITH YOU
+                </div>
+                <p className="text-xs text-white/80 mt-0.5 leading-snug">
+                  Download ViceWave FM as a standalone mobile app for a fullscreen radio experience.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3.5 flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                className="flex-1 min-h-[46px] px-4 rounded-xl bg-gradient-to-r from-[#FF2DAA] via-[#FF3DCE] to-[#27E5FF] text-xs font-mono font-bold tracking-[0.16em] text-white flex items-center justify-center gap-2 shadow-neon-pink active:scale-95 transition"
+              >
+                <Download className="w-4 h-4" />
+                <span>DOWNLOAD PWA APP</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDismiss}
+                className="min-h-[46px] px-4 rounded-xl bg-white/5 border border-white/15 text-xs font-mono text-white/65 hover:text-white"
+              >
+                NOT NOW
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {guideModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[95] bg-black/85 backdrop-blur-lg flex items-end sm:items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ y: 50 }}
+              animate={{ y: 0 }}
+              exit={{ y: 50 }}
+              className="w-full max-w-md rounded-3xl bg-[#120924] border border-[#27E5FF]/60 shadow-neon-cyan p-5 text-white"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
+                <div className="flex items-center gap-2.5">
+                  <Smartphone className="w-5 h-5 text-[#27E5FF]" />
+                  <div>
+                    <div className="text-[10px] font-mono tracking-[0.22em] text-[#27E5FF] uppercase">
+                      DOWNLOADABLE PWA APP
+                    </div>
+                    <h3 className="text-sm font-bold uppercase">
+                      INSTALL VICEWAVE FM
+                    </h3>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setGuideModalOpen(false)}
+                  aria-label="Close install instructions"
+                  className="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-white/70 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3.5 p-3 rounded-2xl bg-[#080713] border border-white/10 mb-4">
+                <img
+                  src="/logo.png"
+                  alt="ViceWave FM"
+                  className="w-16 h-12 object-contain"
+                />
+                <div>
+                  <div className="font-display font-black italic text-sm tracking-[0.18em] text-white">
+                    VICEWAVE FM
+                  </div>
+                  <div className="text-[10px] font-mono text-[#FF2DAA] tracking-widest">
+                    80s • MIAMI • ALL NIGHT
+                  </div>
+                  <div className="text-[10px] font-mono text-white/50 mt-0.5">
+                    Standalone Fullscreen PWA • No Ads
+                  </div>
+                </div>
+              </div>
+
+              {isIOS ? (
+                <div className="space-y-3 text-xs">
+                  <div className="text-[10px] font-mono tracking-[0.2em] text-[#27E5FF] uppercase">
+                    IPHONE / IPAD (SAFARI) DOWNLOAD STEPS:
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-[#27E5FF]/20 border border-[#27E5FF] flex items-center justify-center text-[#27E5FF] shrink-0">
+                      <Share className="w-4 h-4" />
+                    </span>
+                    <p className="text-white/85 leading-relaxed">
+                      <strong>1.</strong> Tap the <strong>Share</strong> button at the bottom of Safari.
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-[#FF2DAA]/20 border border-[#FF2DAA] flex items-center justify-center text-[#FF2DAA] shrink-0">
+                      <PlusSquare className="w-4 h-4" />
+                    </span>
+                    <p className="text-white/85 leading-relaxed">
+                      <strong>2.</strong> Scroll down and tap <strong>&ldquo;Add to Home Screen&rdquo;</strong>, then tap <strong>Add</strong>.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3 text-xs">
+                  <div className="text-[10px] font-mono tracking-[0.2em] text-[#27E5FF] uppercase">
+                    ANDROID / CHROME DOWNLOAD STEPS:
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-[#27E5FF]/20 border border-[#27E5FF] flex items-center justify-center text-[#27E5FF] shrink-0">
+                      <MoreVertical className="w-4 h-4" />
+                    </span>
+                    <p className="text-white/85 leading-relaxed">
+                      <strong>1.</strong> Tap the browser <strong>Menu (⋮)</strong> in the top-right corner (or Share on iOS).
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-[#FF2DAA]/20 border border-[#FF2DAA] flex items-center justify-center text-[#FF2DAA] shrink-0">
+                      <Download className="w-4 h-4" />
+                    </span>
+                    <p className="text-white/85 leading-relaxed">
+                      <strong>2.</strong> Tap <strong>&ldquo;Install app&rdquo;</strong> or <strong>&ldquo;Add to Home screen&rdquo;</strong> to download the app onto your phone.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setGuideModalOpen(false)}
+                className="mt-5 w-full min-h-[46px] rounded-xl bg-gradient-to-r from-[#FF2DAA] to-[#27E5FF] text-xs font-mono font-bold tracking-[0.2em] text-white uppercase"
+              >
+                GOT IT • BACK TO RADIO
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 };
 
@@ -511,13 +751,6 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({
     stations,
   } = usePlayer();
 
-  // Register PWA Service Worker
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
-    }
-  }, []);
-
   const upNextTracks = tracks
     .filter((t) => currentStation.trackIds.includes(t.id))
     .slice(0, 5);
@@ -534,25 +767,19 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({
       }}
       className="relative min-h-screen w-full overflow-x-hidden bg-[#080713] text-white flex flex-col"
     >
-      {/* Original Atmospheric Background */}
       <SunsetBackground
         animated={preferences.backgroundAnimation && !preferences.reducedMotion}
         nightDrive={preferences.nightDrive}
       />
 
-      {/* Cinematic 1.3s Startup Airwave Lock */}
       <StartupOverlay />
 
-      {/* Fullscreen Car-Dashboard Night Drive Mode */}
       <NightDriveOverlay />
 
-      {/* Sleep Timer & Station Queue Modals */}
       <SleepTimerModal />
       <QueueDrawer />
 
-      {/* 3-Column Desktop Layout + Centered Mobile Console */}
       <div className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 pt-2 pb-36 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* DESKTOP LEFT PANEL: VICEWAVE Branding + Station Dial Info */}
         <aside className="hidden lg:flex lg:col-span-3 flex-col gap-5 sticky top-8 pt-4">
           <div className="p-5 rounded-2xl bg-[#110922]/85 backdrop-blur-md border border-white/10 shadow-smoked-glass">
             <ViceWaveLogo
@@ -601,14 +828,15 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({
           </div>
         </aside>
 
-        {/* CENTER COLUMN: Primary Mobile/Radio Interface (430-460px max width) */}
         <main className="w-full max-w-[450px] mx-auto lg:col-span-6">
+          {/* Top-of-Screen Downloadable PWA Bar */}
+          <InstallPrompt renderTopBarOnly />
           <OfflineAndErrorBanners />
           {children}
+          {/* Bottom Full PWA Download Card & Modal */}
           <InstallPrompt />
         </main>
 
-        {/* DESKTOP RIGHT PANEL: UP NEXT + RECENTLY ON AIR */}
         <aside className="hidden lg:flex lg:col-span-3 flex-col gap-5 sticky top-8 pt-4">
           <div className="p-5 rounded-2xl bg-[#110922]/85 backdrop-blur-md border border-white/10 shadow-smoked-glass">
             <div className="text-[10px] font-mono tracking-[0.24em] text-[#27E5FF] uppercase mb-3">
@@ -683,7 +911,6 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({
         </aside>
       </div>
 
-      {/* Persistent MiniPlayer & Floating Dark Glass Bottom Navigation */}
       <MiniPlayer />
       <BottomNavigation />
     </div>

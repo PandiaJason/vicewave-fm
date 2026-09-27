@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { usePlayer } from '@/player/PlayerProvider';
 import { ViceWaveLogo } from '@/components/ViceWaveLogo';
 import { GlassPanel } from '@/components/Atmosphere';
-import { Disc, Radio, Sparkles, WifiOff } from 'lucide-react';
+import { Download, WifiOff } from 'lucide-react';
 
 export const SignalMeter: React.FC = () => {
   const { playerState, isOffline } = usePlayer();
@@ -74,10 +74,16 @@ export const RadioHeader: React.FC = () => {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
+  const triggerInstallModal = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('vicewave:open-install'));
+    }
+  };
+
   return (
-    <header className="w-full pt-2 pb-3 flex flex-col items-center">
-      <div className="w-full flex items-center justify-between px-1 mb-2">
-        <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#160A2B]/90 border border-white/10">
+    <header className="w-full pt-1 pb-3 flex flex-col items-center">
+      <div className="w-full flex items-center justify-between px-1 mb-2 gap-1.5">
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#160A2B]/90 border border-white/10">
           <span
             className={`w-2 h-2 rounded-full ${
               playerState === 'PLAYING'
@@ -85,23 +91,35 @@ export const RadioHeader: React.FC = () => {
                 : 'bg-[#27E5FF]/60'
             }`}
           />
-          <span className="text-[10px] font-mono tracking-[0.2em] text-white/85 uppercase">
+          <span className="text-[9px] sm:text-[10px] font-mono tracking-[0.16em] text-white/85 uppercase">
             LIVE FROM THE COAST
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {sleepTimer.option !== 'OFF' && (
             <button
               type="button"
               onClick={() => setSleepModalOpen(true)}
-              className="px-2 py-0.5 rounded-full bg-[#FF2DAA]/20 border border-[#FF2DAA]/50 text-[10px] font-mono text-[#FF2DAA] tracking-wider"
+              className="px-2 py-0.5 rounded-full bg-[#FF2DAA]/20 border border-[#FF2DAA]/50 text-[9px] font-mono text-[#FF2DAA] tracking-wider"
             >
               {sleepTimer.option === 'END_OF_TRACK'
                 ? 'SLEEP: END'
-                : `SLEEP IN ${formatRemaining(sleepTimer.remainingSeconds)}`}
+                : `SLEEP ${formatRemaining(sleepTimer.remainingSeconds)}`}
             </button>
           )}
+
+          {/* Direct 1-Tap Mobile PWA Download Trigger */}
+          <button
+            type="button"
+            onClick={triggerInstallModal}
+            aria-label="Download ViceWave FM Mobile App"
+            className="px-2.5 py-1 rounded-full bg-gradient-to-r from-[#FF2DAA]/30 to-[#27E5FF]/30 border border-[#27E5FF]/60 text-[9px] font-mono font-bold tracking-wider text-white flex items-center gap-1 shadow-neon-cyan active:scale-95 transition"
+          >
+            <Download className="w-3 h-3 text-[#27E5FF]" />
+            <span>GET APP</span>
+          </button>
+
           <SignalMeter />
         </div>
       </div>
@@ -115,7 +133,6 @@ export const FrequencyTuner: React.FC = () => {
   const { stations, currentStation, selectStation, stepStation } = usePlayer();
   const touchStartX = useRef<number | null>(null);
 
-  // Convert 88..108 FM range to percentage
   const minFreq = 88;
   const maxFreq = 108;
   const markerPercent = Math.max(
@@ -146,9 +163,7 @@ export const FrequencyTuner: React.FC = () => {
       role="region"
       aria-label="FM Frequency Tuner"
     >
-      {/* Dial Scale */}
       <div className="relative h-12 rounded-xl bg-[#070510]/95 border border-white/10 px-3 flex flex-col justify-between py-1.5 overflow-hidden shadow-inner">
-        {/* Scale Numbers */}
         <div className="flex items-center justify-between text-[10px] font-mono text-white/50 px-1">
           {dialNumbers.map((num) => (
             <span
@@ -164,7 +179,6 @@ export const FrequencyTuner: React.FC = () => {
           ))}
         </div>
 
-        {/* Tick marks */}
         <div className="relative flex items-end justify-between h-3 px-1">
           {Array.from({ length: 41 }).map((_, idx) => {
             const isMajor = idx % 4 === 0;
@@ -179,7 +193,6 @@ export const FrequencyTuner: React.FC = () => {
           })}
         </div>
 
-        {/* Station hotspot dots on dial */}
         {stations.map((st) => {
           const pos = ((st.numericFreq - minFreq) / (maxFreq - minFreq)) * 100;
           const isCurrent = st.id === currentStation.id;
@@ -203,7 +216,6 @@ export const FrequencyTuner: React.FC = () => {
           );
         })}
 
-        {/* Glowing vertical tuning needle marker */}
         <motion.div
           animate={{ left: `${markerPercent}%` }}
           transition={{ type: 'spring', stiffness: 260, damping: 26 }}
@@ -249,7 +261,6 @@ export const RadioKnob: React.FC = () => {
           ◀ TUNE
         </button>
 
-        {/* Physical metallic rotary knob */}
         <button
           type="button"
           onClick={() => rotateStep('NEXT')}
@@ -349,7 +360,6 @@ export const RadioDisplay: React.FC = () => {
       crt={preferences.crtEnabled}
       className="w-full p-4 bg-gradient-to-b from-[#130926]/95 to-[#090614]/95 border border-white/15"
     >
-      {/* Top Smoked Glass Receiver Status Row */}
       <div className="flex items-center justify-between text-[10px] font-mono tracking-[0.2em] text-white/55 border-b border-white/[0.07] pb-2">
         <div className="flex items-center gap-2">
           <span className="px-1.5 py-0.5 rounded bg-[#27E5FF]/15 border border-[#27E5FF]/40 text-[#27E5FF] font-bold">
@@ -377,7 +387,6 @@ export const RadioDisplay: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Digital Frequency Receiver */}
       <div className="py-3 flex flex-col items-center justify-center relative">
         <div className="flex items-baseline justify-center gap-2">
           <motion.span
@@ -403,7 +412,6 @@ export const RadioDisplay: React.FC = () => {
           </div>
         </div>
 
-        {/* Station Name & Tagline */}
         <div className="mt-1 text-center">
           <div className="text-base sm:text-lg font-display font-extrabold tracking-[0.22em] text-white uppercase">
             {currentStation.name}
@@ -414,13 +422,10 @@ export const RadioDisplay: React.FC = () => {
         </div>
       </div>
 
-      {/* Interactive FM Tuner Bar */}
       <FrequencyTuner />
 
-      {/* Optional Hardware Rotary Knob */}
       {preferences.tuningEffects && <RadioKnob />}
 
-      {/* Station Quick Presets */}
       <StationSelector />
     </GlassPanel>
   );

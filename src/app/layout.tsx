@@ -44,6 +44,23 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Orbitron:ital,wght@0,700..900;1,700..900&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Share+Tech+Mono&display=swap"
           rel="stylesheet"
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.__deferredPwaPrompt = null;
+              window.addEventListener('beforeinstallprompt', function(e) {
+                e.preventDefault();
+                window.__deferredPwaPrompt = e;
+                window.dispatchEvent(new CustomEvent('vicewave:pwa-ready'));
+              });
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').catch(function() {});
+                });
+              }
+            `,
+          }}
+        />
       </head>
       <body className="font-sans antialiased bg-[#080713] text-white selection:bg-[#FF2DAA] selection:text-white">
         <PlayerProvider>

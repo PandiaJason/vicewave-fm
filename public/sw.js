@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vicewave-fm-shell-v1';
+const CACHE_NAME = 'vicewave-fm-shell-v2';
 
 const APP_SHELL_ASSETS = [
   '/',
@@ -6,10 +6,11 @@ const APP_SHELL_ASSETS = [
   '/favorites',
   '/settings',
   '/manifest.webmanifest',
-  '/icon-192.svg',
-  '/icon-512.svg',
-  '/icon-maskable.svg',
-  '/apple-touch-icon.svg',
+  '/logo.png',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable.png',
+  '/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -47,8 +48,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Same-origin App Shell & static assets: Network-first with Cache fallback for navigation,
-  // Stale-while-revalidate for static assets
   if (url.origin === self.location.origin) {
     if (request.mode === 'navigate') {
       event.respondWith(
