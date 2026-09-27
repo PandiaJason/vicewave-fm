@@ -57,6 +57,8 @@ export class YouTubeAudioSource implements IAudioSource {
   private pendingPlay = false;
   private desiredVolume = 85;
   private desiredMuted = false;
+  private userIntendedPlay = false;
+  private visibilityHandler: (() => void) | null = null;
 
   constructor(events: AudioSourceEvents) {
     this.events = events;
@@ -64,6 +66,24 @@ export class YouTubeAudioSource implements IAudioSource {
 
   init(containerId: string, initialTrack: Track, playlistId?: string): void {
     if (typeof window === 'undefined') return;
+
+    // Keep background playback alive if mobile browser attempts to pause on visibilitychange / screen lock
+    this.visibilityHandler = () => {
+      if (this.userIntendedPlay && this.isReady && this.player) {
+        setTimeout(() => {
+          if (this.userIntendedPlay && this.player) {
+            try {
+              this.player.playVideo();
+            } catch {
+              // ignore
+            }
+          }
+        }, 60);
+      }
+    };
+    document.addEventListener('visibilitychange', this.visibilityHandler);
+    window.addEventListener('pagehide', this.visibilityHandler);
+    window.addEventListener('blur', this.visibilityHandler);
 
     const createPlayer = () => {
       if (!window.YT || !window.YT.Player) return;
@@ -78,6 +98,7 @@ export class YouTubeAudioSource implements IAudioSource {
             rel: 0,
             modestbranding: 1,
             enablejsapi: 1,
+            origin: window.location.origin,
             ...(playlistId ? { listType: 'playlist', list: playlistId } : {}),
           },
           events: {
@@ -96,6 +117,7 @@ export class YouTubeAudioSource implements IAudioSource {
                 this.loadTrack(track, autoplay);
               } else if (this.pendingPlay) {
                 this.pendingPlay = false;
+                this.userIntendedPlay = true;
                 e.target.playVideo();
               }
             },
@@ -136,10 +158,29 @@ export class YouTubeAudioSource implements IAudioSource {
   private handleStateChange(stateCode: number) {
     // YT.PlayerState: -1 UNSTARTED, 0 ENDED, 1 PLAYING, 2 PAUSED, 3 BUFFERING, 5 CUED
     if (stateCode === 1) {
+      this.userIntendedPlay = true;
       this.events.onStatusChange('PLAYING');
       this.startProgressLoop();
       this.syncMetadata();
     } else if (stateCode === 2) {
+      // If the page is hidden (backgrounded / screen locked) and the user did NOT pause,
+      // immediately resume playback to maintain background mode!
+      if (
+        this.userIntendedPlay &&
+        typeof document !== 'undefined' &&
+        (document.hidden || document.visibilityState === 'hidden')
+      ) {
+        setTimeout(() => {
+          if (this.userIntendedPlay && this.player) {
+            try {
+              this.player.playVideo();
+            } catch {
+              // ignore
+            }
+          }
+        }, 80);
+        return;
+      }
       this.events.onStatusChange('PAUSED');
       this.stopProgressLoop();
     } else if (stateCode === 3) {
@@ -192,6 +233,7 @@ export class YouTubeAudioSource implements IAudioSource {
   }
 
   play(): void {
+    this.userIntendedPlay = true;
     if (!this.isReady || !this.player) {
       this.pendingPlay = true;
       this.events.onStatusChange('BUFFERING');
@@ -205,6 +247,7 @@ export class YouTubeAudioSource implements IAudioSource {
   }
 
   pause(): void {
+    this.userIntendedPlay = false;
     this.pendingPlay = false;
     if (!this.isReady || !this.player) return;
     try {
@@ -216,6 +259,7 @@ export class YouTubeAudioSource implements IAudioSource {
   }
 
   loadTrack(track: Track, autoplay: boolean): void {
+    this.userIntendedPlay = autoplay;
     if (!this.isReady || !this.player) {
       this.pendingTrack = { track, autoplay };
       if (autoplay) {
@@ -291,6 +335,11 @@ export class YouTubeAudioSource implements IAudioSource {
 
   destroy(): void {
     this.stopProgressLoop();
+    if (typeof document !== 'undefined' && this.visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+      window.removeEventListener('pagehide', this.visibilityHandler);
+      window.removeEventListener('blur', this.visibilityHandler);
+    }
     if (this.player) {
       try {
         this.player.destroy();

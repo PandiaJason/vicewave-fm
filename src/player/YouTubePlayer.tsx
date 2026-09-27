@@ -14,9 +14,9 @@ interface YouTubePlayerProps {
 
 /**
  * Persistent YouTube IFrame Player wrapper.
- * Remains mounted in the DOM at all times so audio playback never resets during navigation.
- * When `videoModeOpen` is true, displays the supported YouTube embedded player in a full
- * high-contrast dashboard console with "RETURN TO RADIO" control, without obscuring mandatory YouTube controls.
+ * When `videoModeOpen` is false, it stays inside the active viewport at 1% opacity (2x2px)
+ * rather than 0% off-screen so mobile browsers (iOS Safari / Android Chrome) never
+ * throttle or suspend the embedded audio pipeline during background playback.
  */
 export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
   videoModeOpen,
@@ -32,7 +32,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
       className={
         videoModeOpen
           ? 'fixed inset-0 z-[90] flex flex-col items-center justify-center bg-[#080713]/95 backdrop-blur-xl p-4'
-          : 'fixed -bottom-2 -right-2 w-[240px] h-[135px] opacity-0 pointer-events-none overflow-hidden -z-10'
+          : 'fixed bottom-1 right-1 w-[2px] h-[2px] opacity-[0.01] pointer-events-none overflow-hidden z-0'
       }
     >
       {videoModeOpen && (

@@ -368,7 +368,9 @@ export const RadioDisplay: React.FC = () => {
           <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-white/80">
             STEREO
           </span>
-          <span className="hidden xs:inline text-white/45">MEM</span>
+          <span className="px-1.5 py-0.5 rounded bg-[#FF2DAA]/15 border border-[#FF2DAA]/40 text-[#FF2DAA] font-bold">
+            BG PLAY
+          </span>
         </div>
 
         <div className="flex items-center gap-2">

@@ -23,6 +23,7 @@ import {
   cacheTrackMetadata,
 } from '@/lib/db';
 import { IAudioSource } from '@/player/AudioSource';
+import { backgroundAudioManager } from '@/player/backgroundAudio';
 import {
   DEFAULT_PREFERENCES,
   INITIAL_TRACKS,
@@ -101,7 +102,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
   const [stations] = useState<Station[]>(STATIONS);
   const [currentStationId, setCurrentStationId] = useState<string>('vicewave-fm');
-  const [currentTrackId, setCurrentTrackId] = useState<string>('vw-04'); // index 4 B-8EORB783c default
+  const [currentTrackId, setCurrentTrackId] = useState<string>('vw-04');
   const [playerState, setPlayerState] = useState<PlaybackStatus>('IDLE');
   const [favorites, setFavorites] = useState<string[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -148,7 +149,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [tracks, currentTrackId]
   );
 
-  // Trigger subtle haptic vibration where supported
   const triggerHaptic = useCallback((ms = 10) => {
     if (typeof window !== 'undefined' && 'vibrate' in navigator) {
       try {
@@ -159,7 +159,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, []);
 
-  // Load IndexedDB state on mount
   useEffect(() => {
     let mounted = true;
     async function hydrateFromDB() {
@@ -172,7 +171,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       if (!mounted) return;
 
-      // Respect OS prefers-reduced-motion
       const osReducedMotion =
         typeof window !== 'undefined' &&
         window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -195,7 +193,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (savedHist.length > 0) {
         setHistory(savedHist);
       } else {
-        // Seed initial history so RECENTLY ON AIR feels alive right away
         const initialHistory = await saveHistoryEntry('vw-04');
         setHistory(initialHistory);
       }
@@ -220,7 +217,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, []);
 
-  // Online / Offline network listeners
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const updateOnlineStatus = () => {
@@ -239,10 +235,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, []);
 
-  // Advance to next track helper
   const handleNextTrackInternal = useCallback((fromEnded = false) => {
     if (fromEnded && sleepTimerRef.current.option === 'END_OF_TRACK') {
       audioSourceRef.current?.pause();
+      backgroundAudioManager.stopKeepAlive();
       setPlayerState('PAUSED');
       setSleepTimer({ option: 'OFF', expiresAt: null, remainingSeconds: null });
       return;
@@ -258,6 +254,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const current = allTracks.find((t) => t.id === currentTrackIdRef.current) || pool[0];
       audioSourceRef.current?.seek(0);
       audioSourceRef.current?.play();
+      backgroundAudioManager.startKeepAlive();
       saveHistoryEntry(current.id).then(setHistory);
       return;
     }
@@ -271,6 +268,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const nextIdx = idx >= 0 ? (idx + 1) % pool.length : 0;
       if (fromEnded && prefs.repeatMode === 'OFF' && idx === pool.length - 1) {
         audioSourceRef.current?.pause();
+        backgroundAudioManager.stopKeepAlive();
         setPlayerState('PAUSED');
         return;
       }
@@ -279,19 +277,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     setCurrentTrackId(next.id);
     progressStore.setProgress(0, next.duration);
+    backgroundAudioManager.startKeepAlive();
     audioSourceRef.current?.loadTrack(next, true);
     saveHistoryEntry(next.id).then(setHistory);
     saveStationState(currentStationIdRef.current, next.id);
   }, []);
 
-  // Initialize YouTubeAudioSource once on client
   useEffect(() => {
     const source = new YouTubeAudioSource({
       onStatusChange: (status) => {
         setPlayerState(status);
+        if (status === 'PLAYING') {
+          backgroundAudioManager.startKeepAlive();
+        }
       },
       onTimeUpdate: (curr, dur) => {
         progressStore.setProgress(curr, dur);
+        backgroundAudioManager.updatePositionState(curr, dur);
       },
       onTrackEnd: () => {
         handleNextTrackInternal(true);
@@ -333,7 +335,15 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, [handleNextTrackInternal]);
 
-  // Sleep Timer countdown effect
+  // Synchronize Lock-Screen MediaSession metadata whenever track, station, or playback state updates
+  useEffect(() => {
+    backgroundAudioManager.updateMediaSessionMetadata(
+      currentTrack,
+      currentStation,
+      playerState === 'PLAYING'
+    );
+  }, [currentTrack, currentStation, playerState]);
+
   useEffect(() => {
     if (!sleepTimer.expiresAt) return;
 
@@ -342,6 +352,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const diffSec = Math.max(0, Math.ceil((sleepTimer.expiresAt! - now) / 1000));
       if (diffSec <= 0) {
         audioSourceRef.current?.pause();
+        backgroundAudioManager.stopKeepAlive();
         setPlayerState('PAUSED');
         setSleepTimer({ option: 'OFF', expiresAt: null, remainingSeconds: null });
       } else {
@@ -355,15 +366,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => clearInterval(timer);
   }, [sleepTimer.expiresAt]);
 
-  // Screen Wake Lock for Night Drive mode
+  // Request Screen Wake Lock whenever actively playing or in Night Drive mode
   useEffect(() => {
     let wakeLock: { release: () => Promise<void> } | null = null;
     async function requestWakeLock() {
       if (
         typeof navigator !== 'undefined' &&
         'wakeLock' in navigator &&
-        preferences.nightDrive &&
-        preferences.keepScreenAwake
+        (playerState === 'PLAYING' || (preferences.nightDrive && preferences.keepScreenAwake))
       ) {
         try {
           const navWithWake = navigator as Navigator & {
@@ -371,7 +381,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           };
           wakeLock = await navWithWake.wakeLock.request('screen');
         } catch {
-          // WakeLock may be blocked by battery saver or browser policy
+          // ignore
         }
       }
     }
@@ -381,18 +391,19 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         wakeLock.release().catch(() => {});
       }
     };
-  }, [preferences.nightDrive, preferences.keepScreenAwake]);
+  }, [playerState, preferences.nightDrive, preferences.keepScreenAwake]);
 
-  // Play / Pause controls
   const play = useCallback(() => {
     if (isOffline) return;
     triggerHaptic(10);
+    backgroundAudioManager.startKeepAlive();
     audioSourceRef.current?.play();
     saveHistoryEntry(currentTrackIdRef.current).then(setHistory);
   }, [isOffline, triggerHaptic]);
 
   const pause = useCallback(() => {
     triggerHaptic(8);
+    backgroundAudioManager.stopKeepAlive();
     audioSourceRef.current?.pause();
   }, [triggerHaptic]);
 
@@ -406,11 +417,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const nextTrack = useCallback(() => {
     triggerHaptic(12);
+    backgroundAudioManager.startKeepAlive();
     handleNextTrackInternal(false);
   }, [handleNextTrackInternal, triggerHaptic]);
 
   const previousTrack = useCallback(() => {
     triggerHaptic(12);
+    backgroundAudioManager.startKeepAlive();
     const currTime = audioSourceRef.current?.getCurrentTime() || 0;
     if (currTime > 4) {
       audioSourceRef.current?.seek(0);
@@ -437,6 +450,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const found = tracksRef.current.find((t) => t.id === trackId);
       if (!found) return;
       triggerHaptic(12);
+      backgroundAudioManager.startKeepAlive();
       if (switchStation && found.stationId !== currentStationIdRef.current) {
         setCurrentStationId(found.stationId);
       }
@@ -449,19 +463,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [triggerHaptic]
   );
 
-  // Station tuning with < 520ms rolling transition ("TUNING... 98.1 -> 98.2 -> 98.3 -> SIGNAL LOCKED")
   const selectStation = useCallback(
     (stationId: string) => {
       const target = stations.find((s) => s.id === stationId);
       if (!target) return;
 
       triggerHaptic(15);
+      backgroundAudioManager.startKeepAlive();
       const startFreq = currentStation.numericFreq;
       const endFreq = target.numericFreq;
 
       setCurrentStationId(target.id);
 
-      // Pick first track in station rotation
       const stationTrack =
         tracksRef.current.find((t) => t.id === target.trackIds[0]) ||
         tracksRef.current.find((t) => t.stationId === target.id) ||
@@ -528,6 +541,17 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const seekTo = useCallback((seconds: number) => {
     audioSourceRef.current?.seek(seconds);
   }, []);
+
+  // Register Lock-Screen & Bluetooth/CarPlay MediaSession controls
+  useEffect(() => {
+    backgroundAudioManager.registerActionHandlers({
+      onPlay: () => play(),
+      onPause: () => pause(),
+      onNext: () => nextTrack(),
+      onPrev: () => previousTrack(),
+      onSeekTo: (seconds) => seekTo(seconds),
+    });
+  }, [play, pause, nextTrack, previousTrack, seekTo]);
 
   const setVolume = useCallback((volume: number) => {
     const clamped = Math.max(0, Math.min(100, volume));
@@ -634,7 +658,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setPlayerState('OFFLINE');
       return;
     }
-    const current = tracksRef.current.find((t) => t.id === currentTrackIdRef.current) || tracksRef.current[0];
+    backgroundAudioManager.startKeepAlive();
+    const current =
+      tracksRef.current.find((t) => t.id === currentTrackIdRef.current) || tracksRef.current[0];
     audioSourceRef.current?.loadTrack(current, true);
   }, []);
 
@@ -656,7 +682,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     await saveUserPreferences(DEFAULT_PREFERENCES);
   }, []);
 
-  // Global keyboard shortcuts for accessibility
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
